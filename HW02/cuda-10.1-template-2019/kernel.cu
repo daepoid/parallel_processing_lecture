@@ -3,26 +3,22 @@
 #include <cuda.h>
 #include <stdio.h>
 // 32 64 128
-#define MAX 4
+#define MAX 16
+#define BLOCKS 32
 #define EPOCH 100
-#define BLOCKS 8
 #pragma warning(disable:4996)
 
 __global__ void matrix_multiplication(int* C, int* A, int* B) {
-  /*int i = blockIdx.y * blockDim.y + threadIdx.y;
-  int j = blockIdx.x * blockDim.x + threadIdx.x;*/
+  int row = blockIdx.y * blockDim.y + threadIdx.y;
+  int col = blockIdx.x * blockDim.x + threadIdx.x;
 
-  int i = threadIdx.x;
-  int j = blockIdx.x;
-
-  for (int k = 0; k < MAX; k++) {
-    C[MAX * j + i] += A[MAX * j + k] * B[MAX * k + i];
+  for (int i = 0; i < MAX; i++) {
+    C[MAX * row + col] += A[MAX * row + i] * B[MAX * i + col];
   }
 }
 
 int main() {
   int A[MAX * MAX], B[MAX * MAX], C[MAX * MAX] = { 0, };
-  int cycle = MAX / 10;
   float time, time_avg = 0;
   cudaEvent_t start, stop;
 
@@ -31,8 +27,9 @@ int main() {
   cudaEventRecord(start, 0); // record start event
 
   for (int i = 0; i < MAX * MAX; i++) { // create A, B data
-    A[i] = 2;
-    B[i] = 2;
+    A[i] = 1;
+    B[i] = 1;
+    C[i] = 0;
   }
 
   for (int t = 0; t < EPOCH; t++) { // EPOCH만큼 반복하여 평균시간을 계산
@@ -46,14 +43,17 @@ int main() {
     cudaMemcpy(cuda_A, A, MAX * MAX * sizeof(int), cudaMemcpyHostToDevice);
     cudaMemcpy(cuda_B, B, MAX * MAX * sizeof(int), cudaMemcpyHostToDevice);
 
-    dim3 threadsPerBlock(BLOCKS, BLOCKS);
-    dim3 numBlocks(MAX * MAX / threadsPerBlock.x);
+    //dim3 dimGrid(MAX * MAX / BLOCKS);
+    dim3 dimGrid(MAX * MAX / BLOCKS);
+    dim3 dimBlock(BLOCKS, BLOCKS);
 
     cudaEventCreate(&start); // 시간 기록
     cudaEventCreate(&stop);
     cudaEventRecord(start, 0);
 
-    matrix_multiplication << < numBlocks, threadsPerBlock >> > (cuda_C, cuda_A, cuda_B); // Vector Addition 계산
+    //matrix_multiplication << < numBlocks, threadsPerBlock >> > (cuda_C, cuda_A, cuda_B); // Vector Addition 계산
+    matrix_multiplication << < dimGrid, dimBlock >> > (cuda_C, cuda_A, cuda_B); // Vector Addition 계산
+    //cudaDeviceSynchronize();
 
     cudaEventRecord(stop, 0);
     cudaEventSynchronize(stop);
@@ -63,27 +63,17 @@ int main() {
 
     cudaMemcpy(C, cuda_C, MAX * MAX * sizeof(int), cudaMemcpyDeviceToHost);
 
-    for (int i = 0; i < MAX * MAX; i++) {
-      if ((i + 1) % MAX == 0) {
-        printf("%d\n", C[i]);
-      }
-      else {
-        printf("%d ", C[i]);
+    if (t == 0) {
+      for (int i = 0; i < MAX * MAX; i++) {
+        if ((i + 1) % MAX == 0) {
+          printf("%d\n", C[i]);
+        }
+        else {
+          printf("%d ", C[i]);
+        }
       }
     }
 
-    /*if (t == 0) {
-      for (int i = 0; i < MAX; i++) {
-        for (int j = 0; j < MAX; j++) {
-          if (j == MAX - 1) {
-            printf("%d\n", C[i * MAX + j]);
-          }
-          else {
-            printf("%d ", C[i * MAX + j]);
-          }
-        }
-      }
-    }*/
     time_avg += time;
     //printf("\n\n");
 
