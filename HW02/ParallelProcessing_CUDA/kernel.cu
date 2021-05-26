@@ -3,7 +3,7 @@
 #include <cuda.h>
 #include <stdio.h>
 // 32 64 128
-#define MAX 16 // matrix length
+#define MAX 128 // matrix length
 #define BLOCKS 8
 #define EPOCH 100
 #pragma warning(disable:4996)

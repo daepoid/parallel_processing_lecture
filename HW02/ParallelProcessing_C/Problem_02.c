@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#define MAX 16
+#define MAX 128
 #define EPOCH 100
 #pragma warning(disable:4996)
 
