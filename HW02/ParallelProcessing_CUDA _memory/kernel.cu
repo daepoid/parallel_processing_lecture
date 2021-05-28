@@ -15,59 +15,45 @@
 __global__ void MatMulKernel(double* A, double* B, double* C);
 
 // Get a matrix element
-__device__ float GetElement(const Matrix A, int row, int col) {
-  return A.elements[row * A.stride + col];
-}
-// Set a matrix element
-__device__ void SetElement(Matrix A, int row, int col, float value) {
-  A.elements[row * A.stride + col] = value;
+__device__ float GetElement(double* A, int row, int col) {
+  return A[row * MAX + col];
 }
 
-__device__ Matrix GetSubMatrix(Matrix A, int row, int col) {
-  Matrix Asub;
-  Asub.width = BLOCK_SIZE;
-  Asub.height = BLOCK_SIZE;
-  Asub.stride = A.stride;
-  Asub.elements = &A.elements[A.stride * BLOCK_SIZE * row + BLOCK_SIZE * col];
+// Set a matrix element
+__device__ void SetElement(double* A, int row, int col, double value) {
+  A[row * MAX + col] = value;
+}
+
+__device__ double* GetSubMatrix(double* A, int row, int col) {
+  double* Asub;
+  Asub = &A[MAX * BLOCK_SIZE * row + BLOCK_SIZE * col];
   return Asub;
 }
 
-// Matrix multiplication kernel called by MatMul()
 __global__ void MatMulKernel(double* A, double* B, double* C) {
   int blockRow = blockIdx.y;
   int blockCol = blockIdx.x;
 
   Matrix Csub = GetSubMatrix(C, blockRow, blockCol);
-  // Each thread computes one element of Csub
-  // by accumulating results into Cvalue
-  float Cvalue = 0.0;
-  // Thread row and column within Csub
+
+  double Cvalue = 0.0;
   int row = threadIdx.y;
   int col = threadIdx.x;
-  // Loop over all the sub-matrices of A and B that are
-  // required to compute Csub
-  // Multiply each pair of sub-matrices together
-  // and accumulate the results
-  for (int m = 0; m < (A.width / BLOCK_SIZE); ++m) {
-    // Get sub-matrix Asub of A
+
+  for (int m = 0; m < (MAX / BLOCK_SIZE); ++m) {
     Matrix Asub = GetSubMatrix(A, blockRow, m);
     Matrix Bsub = GetSubMatrix(B, m, blockCol);
-    // Shared memory used to store Asub and Bsub respectively
-    __shared__ float As[BLOCK_SIZE][BLOCK_SIZE];
-    __shared__ float Bs[BLOCK_SIZE][BLOCK_SIZE];
-    // Load Asub and Bsub from device memory to shared memory
-    // Each thread loads one element of each sub-matrix
+
+    __shared__ double As[BLOCK_SIZE][BLOCK_SIZE];
+    __shared__ double Bs[BLOCK_SIZE][BLOCK_SIZE];
+
     As[row][col] = GetElement(Asub, row, col);
     Bs[row][col] = GetElement(Bsub, row, col);
-    // Synchronize to make sure the sub-matrices are loaded
-    // before starting the computation
+
     __syncthreads();
-    // Multiply Asub and Bsub together
-    for (int e = 0; e < BLOCK_SIZE; ++e)
+    for (int e = 0; e < BLOCK_SIZE; ++e) {
       Cvalue += As[row][e] * Bs[e][col];
-    // Synchronize to make sure that the preceding
-    // computation is done before loading two new
-    // sub-matrices of A and B in the next iteration
+    }
     __syncthreads();
   }
   // Write Csub to device memory
@@ -97,10 +83,9 @@ void MatMul(double* A, double* B, double* C) {
 
   err = cudaThreadSynchronize();
   printf("Run kernel: %s\n", cudaGetErrorString(err));
-  // Read C from device memory
   err = cudaMemcpy(C, cuda_C, MAX * MAX * sizeof(double), cudaMemcpyDeviceToHost);
   printf("Copy C off of device: %s\n", cudaGetErrorString(err));
-  // Free device memory
+
   cudaFree(cuda_A);
   cudaFree(cuda_B);
   cudaFree(cuda_C);
